@@ -9,34 +9,45 @@ typedef struct {
   int quantum;
 } SchedRRArgs;
 
-void schedRR(FakeOS* os, void* args_){
-  SchedRRArgs* args=(SchedRRArgs*)args_;
+void schedRR(FakeOS* os, void* args_) {
+  SchedRRArgs* args = (SchedRRArgs*)args_;
 
   // look for the first process in ready
   // if none, return
-  if (! os->ready.first)
+  if (!os->ready.first)
     return;
 
-  FakePCB* pcb=(FakePCB*) List_popFront(&os->ready);
-  os->running=pcb;
-  
+  FakePCB* pcb = (FakePCB*)List_popFront(&os->ready);
+  int core_index = 0;
+
+  // Find the first available core to assign the process
+  for (int i = 0; i < MAX_CORES; i++) {
+    if (!os->running_cores[i]) {
+      core_index = i;
+      break;
+    }
+  }
+
+  os->running_cores[core_index] = pcb;
+
   assert(pcb->events.first);
   ProcessEvent* e = (ProcessEvent*)pcb->events.first;
-  assert(e->type==CPU);
+  assert(e->type == CPU);
 
   // look at the first event
-  // if duration>quantum
+  // if duration > quantum
   // push front in the list of event a CPU event of duration quantum
   // alter the duration of the old event subtracting quantum
-  if (e->duration>args->quantum) {
-    ProcessEvent* qe=(ProcessEvent*)malloc(sizeof(ProcessEvent));
-    qe->list.prev=qe->list.next=0;
-    qe->type=CPU;
-    qe->duration=args->quantum;
-    e->duration-=args->quantum;
+  if (e->duration > args->quantum) {
+    ProcessEvent* qe = (ProcessEvent*)malloc(sizeof(ProcessEvent));
+    qe->list.prev = qe->list.next = 0;
+    qe->type = CPU;
+    qe->duration = args->quantum;
+    e->duration -= args->quantum;
     List_pushFront(&pcb->events, (ListItem*)qe);
   }
-};
+}
+
 
 int main(int argc, char** argv) {
   FakeOS_init(&os);
@@ -57,10 +68,24 @@ int main(int argc, char** argv) {
     }
   }
   printf("num processes in queue %d\n", os.processes.size);
-  while(os.running
-        || os.ready.first
-        || os.waiting.first
-        || os.processes.first){
-    FakeOS_simStep(&os);
+
+  while (1) {
+    int cpu_libera = 1; // Flag per verificare se tutti i core sono inattivi
+
+    // Controlla se ci sono processi in esecuzione su tutti i core
+    for (int i = 0; i < MAX_CORES; i++) {
+      if (os.running_cores[i]) {
+        cpu_libera = 0;
+        break;
+      }
+    }
+
+    // Se non ci sono processi in esecuzione su tutti i core e non ci sono più processi in coda, esci dal ciclo
+    if (cpu_libera && !os.ready.first && !os.waiting.first && !os.processes.first) {
+      break;
+    }
+
+     // Esegui il passo di simulazione del sistema operativo
+  FakeOS_simStep(&os);
   }
 }
