@@ -140,46 +140,41 @@ void FakeOS_simStep(FakeOS* os){
   // if last event, destroy running
 
 for (int i = 0; i < MAX_CORES; i++) {
-  FakePCB* running = os->running_cores[i];
+    FakePCB* running=os->running_cores[i];
   printf("\tcore %d: running pid: %d\n", i, running ? running->pid : -1);
   if (running) {
-    ProcessEvent* e = (ProcessEvent*) running->events.first;
-    assert(e->type == CPU);
+    ProcessEvent* e=(ProcessEvent*) running->events.first;
+    assert(e->type==CPU);
     e->duration--;
-    printf("\t\tremaining time:%d\n", e->duration);
-    if (e->duration == 0) {
+    printf("\t\tremaining time:%d\n",e->duration);
+    if (e->duration==0){
       printf("\t\tend burst\n");
       List_popFront(&running->events);
       free(e);
-      if (!running->events.first) {
+      if (! running->events.first) {
         printf("\t\tend process\n");
         free(running); // kill process
-        os->running_cores[i] = 0;
       } else {
-        e = (ProcessEvent*) running->events.first;
-        switch (e->type) {
-          case CPU:
-            printf("\t\tmove to ready\n");
-            List_pushBack(&os->ready, (ListItem*) running);
-            if (!os->running_cores[i]) {
-              os->running_cores[i] = (FakePCB*) List_popFront(&os->ready);
-            }
-            break;
-          case IO:
-            printf("\t\tmove to waiting\n");
-            List_pushBack(&os->waiting, (ListItem*) running);
-            os->running_cores[i] = 0;
-            break;
+        e=(ProcessEvent*) running->events.first;
+        switch (e->type){
+        case CPU:
+          printf("\t\tmove to ready\n");
+          List_pushBack(&os->ready, (ListItem*) running);
+          break;
+        case IO:
+          printf("\t\tmove to waiting\n");
+          List_pushBack(&os->waiting, (ListItem*) running);
+          break;
         }
       }
+      os->running_cores[i] = 0;
     }
   }
-
   // call schedule, if defined
-
   if (os->schedule_fn && !os->running_cores[i]) {
   (*os->schedule_fn)(os, os->schedule_args); 
   }
+
   // if running not defined and ready queue not empty
   // put the first in ready to run
 

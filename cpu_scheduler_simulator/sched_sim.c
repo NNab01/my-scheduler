@@ -5,11 +5,61 @@
 
 FakeOS os;
 
+/*typedef struct {
+  int quantum;
+} SchedRRArgs;*/
+
 typedef struct {
   int quantum;
-} SchedRRArgs;
+  float alpha;
+} SchedSJBArgs;
 
-void schedRR(FakeOS* os, void* args_) {
+void schedSJFP(FakeOS* os, void* args_) {
+  SchedSJBArgs* args = (SchedSJBArgs*)args_;
+
+  // look for the first process in ready
+  // if none, return
+  if (!os->ready.first)
+    return;
+
+  FakePCB* pcb = (FakePCB*)List_popFront(&os->ready);
+  int core_index = 0;
+
+
+  // Find the first available core to assign the process
+  for (int i = 0; i < MAX_CORES; i++) {
+    if (!os->running_cores[i]) {
+      core_index = i;
+      break;
+    }
+  }
+
+  os->running_cores[core_index] = pcb;
+
+  assert(pcb->events.first);
+  ProcessEvent* e = (ProcessEvent*)pcb->events.first;
+  assert(e->type == CPU);
+  // Calcola il nuovo quantum previsto secondo:  q(t+1) = a * q_current + (1-a) * q(t)
+  int predicted_quantum = (args->alpha) * (e->duration) + (1 - args->alpha) * (args->quantum);
+  args->quantum = predicted_quantum;
+
+  if (e->duration > args->quantum) {
+    ProcessEvent* qe = (ProcessEvent*)malloc(sizeof(ProcessEvent));
+    qe->list.prev = qe->list.next = 0;
+    qe->type = CPU;
+    qe->duration = args->quantum;
+    e->duration -= args->quantum;
+    List_pushFront(&pcb->events, (ListItem*)qe);
+  }
+
+
+printf("Nuovo quantum previsto: %d\n", predicted_quantum);
+
+}
+
+
+
+/*void schedRR(FakeOS* os, void* args_) {
   SchedRRArgs* args = (SchedRRArgs*)args_;
 
   // look for the first process in ready
@@ -46,15 +96,21 @@ void schedRR(FakeOS* os, void* args_) {
     e->duration -= args->quantum;
     List_pushFront(&pcb->events, (ListItem*)qe);
   }
-}
+}*/
 
 
 int main(int argc, char** argv) {
   FakeOS_init(&os);
-  SchedRRArgs srr_args;
+  SchedSJBArgs ssjb_args;
+  ssjb_args.quantum=5;
+  ssjb_args.alpha=0.5;
+  os.schedule_args=&ssjb_args;
+  os.schedule_fn=schedSJFP;
+
+  /*SchedRRArgs srr_args;
   srr_args.quantum=5;
   os.schedule_args=&srr_args;
-  os.schedule_fn=schedRR;
+  os.schedule_fn=schedRR;*/
   
   for (int i=1; i<argc; ++i){
     FakeProcess new_process;
