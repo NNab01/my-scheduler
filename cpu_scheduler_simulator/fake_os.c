@@ -5,10 +5,13 @@
 #include "fake_os.h"
 
 
-void FakeOS_init(FakeOS* os) {
-  //os->running=0; SOSTITUITA CON:
-  for (int i = 0; i < MAX_CORES; i++) {
-  os->running_cores[i] = 0;
+void FakeOS_init(FakeOS* os, int num_cores) {
+  os->num_cores = num_cores;
+
+  os->running_cores = (FakePCB**)malloc(sizeof(FakePCB*) * os->num_cores);
+
+  for (int i = 0; i < os->num_cores; i++) {
+  os->running_cores[i] = NULL;
   }
   List_init(&os->ready);
   List_init(&os->waiting);
@@ -25,7 +28,7 @@ void FakeOS_createProcess(FakeOS* os, FakeProcess* p) {
 
   //assert( (!os->running || os->running->pid!=p->pid) && "pid taken"); SOSTITUITA CON:
   int pidTaken = 0;
-  for (int i = 0; i < MAX_CORES; i++) {
+  for (int i = 0; i < os->num_cores; i++) {
       if (os->running_cores[i] && os->running_cores[i]->pid == p->pid) {
           pidTaken = 1;
           break;
@@ -52,6 +55,9 @@ assert(!pidTaken && "pid taken");
   new_pcb->list.next=new_pcb->list.prev=0;
   new_pcb->pid=p->pid;
   new_pcb->events=p->events;
+  new_pcb->current_time=0;
+  new_pcb->predicted_quantum=5;
+  new_pcb->toUpdate=1;
 
   assert(new_pcb->events.first && "process without events");
 
@@ -139,15 +145,17 @@ void FakeOS_simStep(FakeOS* os){
   // and reschedule process
   // if last event, destroy running
 
-for (int i = 0; i < MAX_CORES; i++) {
+for (int i = 0; i < os->num_cores; i++) {
     FakePCB* running=os->running_cores[i];
   printf("\tcore %d: running pid: %d\n", i, running ? running->pid : -1);
   if (running) {
     ProcessEvent* e=(ProcessEvent*) running->events.first;
     assert(e->type==CPU);
+    running->current_time++;
     e->duration--;
     printf("\t\tremaining time:%d\n",e->duration);
     if (e->duration==0){
+      running->toUpdate=1;
       printf("\t\tend burst\n");
       List_popFront(&running->events);
       free(e);
@@ -188,4 +196,14 @@ for (int i = 0; i < MAX_CORES; i++) {
 }
 
 void FakeOS_destroy(FakeOS* os) {
+  free(os->running_cores);
+
+  // Inizializza tutti i campi a zero o NULL per garantire che non rimangano riferimenti a risorse deallocate
+  os->ready.first = os->ready.last = NULL;
+  os->waiting.first = os->waiting.last = NULL;
+  os->processes.first = os->processes.last = NULL;
+  os->timer = 0;
+  os->schedule_fn = NULL;
+  os->schedule_args = NULL;
+  os->num_cores = 0;
 }
